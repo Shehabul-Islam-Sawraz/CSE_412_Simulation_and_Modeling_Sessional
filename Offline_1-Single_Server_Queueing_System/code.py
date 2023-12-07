@@ -56,9 +56,9 @@ class PMMLCG:
         return self.zrng[stream]
     
     
+pmmlcg = PMMLCG()
 def exponen(exponential_probability_distribution_mean):
-    pmmlcg = PMMLCG()
-    return -1 * exponential_probability_distribution_mean * np.log(pmmlcg.generate(1))
+    return -1 * exponential_probability_distribution_mean * math.log(round(pmmlcg.generate(1), 6))
 
 def initialize_simulation(mean_inter_arrival_time):
     global simulation_time, server_status, number_in_queue, \
@@ -101,11 +101,11 @@ def inc_num_customer_delayed():
         )
         
 def update_time_avg_stats():
-    global area_num_in_queue, area_server_status, number_in_queue,\
+    global area_num_in_queue, area_server_status,\
         simulation_time, time_of_last_event
         
     area_num_in_queue += number_in_queue * (simulation_time - time_of_last_event)
-    area_server_status += (simulation_time - time_of_last_event)
+    area_server_status += server_status * (simulation_time - time_of_last_event)
     time_of_last_event = simulation_time
     
 def timing():
@@ -132,24 +132,18 @@ def arrive(mean_inter_arrival_time, mean_service_time, num_of_delays_required):
             f'{num_of_event}. Next event: Customer {num_of_arrival} Arrival\n'
         )
      
-    if (total_customer_arrived < num_of_delays_required):
-        time_next_event_arrival = simulation_time + exponen(mean_inter_arrival_time)
-        total_customer_arrived += 1
-    else:
-        time_next_event_arrival = math.inf
-        
+    time_next_event_arrival = simulation_time + exponen(mean_inter_arrival_time)
+    total_customer_arrived += 1
+
     if server_status:
         number_in_queue += 1
-        assert number_in_queue <= num_of_delays_required, 'Queue is Full!!'
-        
-        update_time_avg_stats()
+        assert number_in_queue <= num_of_delays_required, 'Queue is Full!!' 
         times_of_arrival.put(simulation_time)
     else:
         inc_num_customer_delayed()
         
         server_status = True
         time_next_event_departure = simulation_time + exponen(mean_service_time)
-        time_of_last_event = simulation_time
         
 def depart(mean_service_time):
     global num_of_departure, time_next_event_arrival, \
@@ -167,25 +161,21 @@ def depart(mean_service_time):
         
     if number_in_queue == 0:
         server_status = False
-        
-        area_server_status += (simulation_time - time_of_last_event)
         time_next_event_departure = math.inf
-        time_of_last_event = simulation_time
     else:
         number_in_queue -= 1
         total_delays += (simulation_time - times_of_arrival.get())
         
         inc_num_customer_delayed()
-        update_time_avg_stats()
         time_next_event_departure = simulation_time + exponen(mean_service_time)
         
 def generate_report():
     with open(OUTPUT_FILE_DIR+RESULT_FILE, "a+") as result:
         result.write(
             f'\nAvg delay in queue: {format(total_delays/num_customers_delayed, ".6f")} minutes\n'
-            f'Avg number in queue: {format(area_num_in_queue/time_of_last_event, ".6f")}\n'
-            f'Server utilization: {format(area_server_status/time_of_last_event, ".6f")}\n'
-            f'Time simulation ended: {format(time_of_last_event, ".6f")} minutes\n'
+            f'Avg number in queue: {format(area_num_in_queue/simulation_time, ".6f")}\n'
+            f'Server utilization: {format(area_server_status/simulation_time, ".6f")}\n'
+            f'Time simulation ended: {format(simulation_time, ".6f")} minutes\n'
         )
         
 def main():
@@ -198,8 +188,6 @@ def main():
     mean_service_time = float(inputs[1])
     num_of_delays_required = int(inputs[2])
     
-    # assert mean_inter_arrival_time > mean_service_time, 'mean_inter_arrival_time not greater than mean_service_time.'
-    # assert num_of_delays_required > 0, 'Invalid total_num_of_delays_required received.'
     if not os.path.exists(OUTPUT_FILE_DIR):
             os.makedirs(OUTPUT_FILE_DIR)
     with open(OUTPUT_FILE_DIR+RESULT_FILE, "a+") as results:
@@ -216,7 +204,9 @@ def main():
     global num_of_event
     while (num_customers_delayed < num_of_delays_required):
         num_of_event += 1
+        
         next_event_type = timing()
+        update_time_avg_stats()
         
         if (next_event_type == 1):
             arrive(mean_inter_arrival_time, mean_service_time, num_of_delays_required)
